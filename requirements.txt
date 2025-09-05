@@ -1,0 +1,18 @@
+# Snyk Repository Importer Dependencies
+# Core HTTP library for API calls
+requests>=2.32.0
+
+# Additional dependencies (included with Python standard library)
+# - threading (built-in)
+# - logging (built-in)
+# - csv (built-in)
+# - json (built-in)
+# - time (built-in)
+# - os (built-in)
+# - sys (built-in)
+# - argparse (built-in)
+# - dataclasses (built-in)
+# - urllib.parse (built-in)
+# - concurrent.futures (built-in)
+# - queue (built-in)
+# - signal (built-in)
