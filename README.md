@@ -62,6 +62,19 @@ Generates a CSV file with import results including status and error messages.
 - Snyk API token with organization creation permissions
 - Snyk group ID
 
+## Environment Variables
+
+For enterprise environments with HTTP proxies:
+
+```bash
+# HTTP proxy for GitHub API calls
+export HTTP_PROXY="http://proxy.company.com:8080"
+export HTTPS_PROXY="http://proxy.company.com:8080"
+
+# Optional: bypass proxy for specific hosts
+export NO_PROXY="localhost,127.0.0.1,api.snyk.io"
+```
+
 ## License
 
 Apache License 2.0

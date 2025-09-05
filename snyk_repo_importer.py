@@ -95,6 +95,10 @@ class SnykRepoImporter:
         
         # Thread-safe logging
         self.logger = self._setup_logging()
+        
+        # Create separate session for GitHub API calls with proxy support
+        self.github_session = requests.Session()
+        self._setup_github_proxy()
         self.results = []
         self.results_lock = threading.Lock()
         
@@ -136,8 +140,48 @@ class SnykRepoImporter:
         }
         return region_urls.get(region, "https://api.snyk.io")
     
+    def _setup_github_proxy(self) -> None:
+        """Setup proxy configuration for GitHub API calls from environment variables."""
+        # Get proxy settings from environment variables
+        http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
+        https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
+        no_proxy = os.getenv('NO_PROXY') or os.getenv('no_proxy')
+        
+        # Configure proxies if any are set
+        if http_proxy or https_proxy:
+            proxies = {}
+            
+            # Add http prefix if not present
+            if http_proxy:
+                if not http_proxy.startswith(('http://', 'https://')):
+                    http_proxy = f'http://{http_proxy}'
+                proxies['http'] = http_proxy
+                
+            if https_proxy:
+                if not https_proxy.startswith(('http://', 'https://')):
+                    https_proxy = f'http://{https_proxy}'
+                proxies['https'] = https_proxy
+            
+            # Set proxies for GitHub session
+            self.github_session.proxies.update(proxies)
+            
+            # Configure NO_PROXY if set
+            if no_proxy:
+                # Parse NO_PROXY list and set up bypass
+                no_proxy_list = [host.strip() for host in no_proxy.split(',')]
+                # Note: requests doesn't have built-in NO_PROXY support, 
+                # but we can handle this in the GitHub API call method
+                self.no_proxy_list = no_proxy_list
+            else:
+                self.no_proxy_list = []
+            
+            self.logger.info(f"GitHub API proxy configured: {proxies}")
+        else:
+            self.no_proxy_list = []
+            self.logger.debug("No proxy configuration found for GitHub API calls")
+    
     def _make_github_api_call(self, url: str, headers: dict = None) -> requests.Response:
-        """Make a GitHub API call with proper rate limiting."""
+        """Make a GitHub API call with proper rate limiting and proxy support."""
         self.github_rate_limiter.wait()
         
         if headers is None:
@@ -150,7 +194,26 @@ class SnykRepoImporter:
         }
         github_headers.update(headers)
         
-        return self.session.get(url, headers=github_headers)
+        # Check if URL should bypass proxy
+        if self.no_proxy_list:
+            from urllib.parse import urlparse
+            parsed_url = urlparse(url)
+            hostname = parsed_url.hostname
+            
+            # Check if hostname should bypass proxy
+            should_bypass = any(
+                hostname == bypass_host or 
+                hostname.endswith(f'.{bypass_host}') or
+                bypass_host == '*'
+                for bypass_host in self.no_proxy_list
+            )
+            
+            if should_bypass:
+                # Use session without proxies for this request
+                return self.session.get(url, headers=github_headers)
+        
+        # Use GitHub session with proxy configuration
+        return self.github_session.get(url, headers=github_headers)
     
     def _make_snyk_api_call(self, method: str, url: str, **kwargs) -> requests.Response:
         """Make a Snyk API call with proper rate limiting and retry logic."""
