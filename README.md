@@ -28,6 +28,9 @@ python3 snyk_repo_importer.py --snyk-token YOUR_TOKEN --group-id GROUP_ID --csv-
 # GitHub Enterprise
 python3 snyk_repo_importer.py --snyk-token YOUR_TOKEN --group-id GROUP_ID --csv-file repos.csv --integration-type github-enterprise --source-org-id SOURCE_ORG_ID
 
+# GitHub Enterprise with custom base URL
+python3 snyk_repo_importer.py --snyk-token YOUR_TOKEN --group-id GROUP_ID --csv-file repos.csv --integration-type github-enterprise --source-org-id SOURCE_ORG_ID --github-base-url https://github.company.com
+
 # High performance
 python3 snyk_repo_importer.py --snyk-token YOUR_TOKEN --group-id GROUP_ID --csv-file repos.csv --threads 15 --rate-limit 20
 ```
@@ -49,6 +52,7 @@ https://github.com/owner/repo3.git
 | `--csv-file` | Yes | CSV file with repository URLs | - |
 | `--org-naming` | No | Naming: `owner-repo` or `repo-only` | `owner-repo` |
 | `--integration-type` | No | `github`, `github-cloud-app`, `github-enterprise`, etc. | `github` |
+| `--github-base-url` | No | GitHub base URL for enterprise instances | `https://github.com` |
 | `--threads` | No | Number of threads | `10` |
 | `--rate-limit` | No | API calls per second | `20.0` |
 

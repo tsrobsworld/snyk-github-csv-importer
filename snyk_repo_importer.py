@@ -71,7 +71,8 @@ class SnykRepoImporter:
     def __init__(self, token: str, org_id: str = None, group_id: str = None,
                  region: str = "SNYK-US-01", rate_limit: float = 20.0, max_threads: int = 10,
                  create_orgs: bool = False, integration_type: str = "github", source_org_id: str = None,
-                 org_naming: str = "owner-repo", org_chunk_size: int = 20, import_chunk_size: int = 20):
+                 org_naming: str = "owner-repo", org_chunk_size: int = 20, import_chunk_size: int = 20,
+                 github_base_url: str = "https://github.com"):
         self.token = token
         self.org_id = org_id
         self.group_id = group_id
@@ -81,6 +82,7 @@ class SnykRepoImporter:
         self.org_naming = org_naming
         self.org_chunk_size = org_chunk_size
         self.import_chunk_size = import_chunk_size
+        self.github_base_url = github_base_url.rstrip('/')  # Remove trailing slash
         self.base_url = self._get_base_url(region)
         self.snyk_rate_limiter = RateLimiter(rate_limit)  # Snyk API rate limiter (configurable)
         self.github_rate_limiter = RateLimiter(1.0)  # GitHub API rate limiter (1 call/sec for safety)
@@ -280,8 +282,17 @@ class SnykRepoImporter:
         # Remove @ symbol if present
         url = url.lstrip('@')
         
-        # Handle different GitHub URL formats
+        # Extract domain from GitHub base URL
+        from urllib.parse import urlparse
+        parsed_base = urlparse(self.github_base_url)
+        domain = parsed_base.netloc or parsed_base.path
+        
+        # Handle different GitHub URL formats with dynamic domain
         patterns = [
+            rf'https://{re.escape(domain)}/([^/]+)/([^/]+?)(?:\.git)?/?$',
+            rf'git@{re.escape(domain)}:([^/]+)/([^/]+?)(?:\.git)?$',
+            rf'{re.escape(domain)}/([^/]+)/([^/]+?)(?:\.git)?/?$',
+            # Fallback patterns for github.com (backward compatibility)
             r'https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$',
             r'git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$',
             r'github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$'
@@ -295,7 +306,7 @@ class SnykRepoImporter:
                 repo = repo.rstrip('.git')
                 return owner, repo
         
-        raise ValueError(f"Invalid GitHub URL format: {url}")
+        raise ValueError(f"Invalid GitHub URL format: {url}. Expected format: {self.github_base_url}/owner/repo")
 
     def read_csv_file(self, csv_file: str) -> List[RepoInfo]:
         """Read CSV file and parse repository URLs."""
@@ -764,6 +775,8 @@ Examples:
     parser.add_argument('--integration-type', default='github',
                        choices=['github', 'github-enterprise', 'gitlab', 'bitbucket-cloud', 'bitbucket-server', 'azure-repos'],
                        help='Integration type for repository import (default: github)')
+    parser.add_argument('--github-base-url', default='https://github.com',
+                       help='GitHub base URL for enterprise instances (default: https://github.com)')
     parser.add_argument('--region', default='SNYK-US-01', 
                        choices=['SNYK-US-01', 'SNYK-US-02', 'SNYK-EU-01', 'SNYK-AU-01'],
                        help='Snyk region (default: SNYK-US-01)')
@@ -811,7 +824,8 @@ Examples:
             source_org_id=source_org_id,
             org_naming=args.org_naming,
             org_chunk_size=args.org_chunk_size,
-            import_chunk_size=args.import_chunk_size
+            import_chunk_size=args.import_chunk_size,
+            github_base_url=args.github_base_url
         )
         
         # Read CSV file
