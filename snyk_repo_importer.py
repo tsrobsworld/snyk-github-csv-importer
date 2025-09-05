@@ -24,7 +24,7 @@ import re
 import time
 import threading
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple, Set, Any
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
@@ -41,6 +41,91 @@ class RepoInfo:
     repo: str
     import_status: str = "pending"
     error_message: Optional[str] = None
+    org_id: Optional[str] = None
+
+
+class SnykUrls:
+    def __init__(self, max_repo_name_length: int = 60):
+        self.max_repo_name_length = max_repo_name_length
+
+    @staticmethod
+    def _squeeze_middle(name: str, max_len: int) -> str:
+        """
+        Squeezes a given string to a specified maximum length by replacing the middle portion
+        with double dots ('..') if the string exceeds the maximum allowed length.
+
+        This method ensures that the string remains at or below the specified maximum length,
+        while preserving the start and end portions of the string for context.
+
+        Args:
+            name: The string to be squeezed.
+            max_len: The desired maximum length of the resulting string.
+
+        Returns:
+            A string that is squeezed to the maximum length if needed. If the input string
+            length is within the limit or if `max_len` is less than or equal to 0, the method
+            will return the original string or an empty string.
+        """
+        if max_len <= 0:
+            return ""
+        if len(name) <= max_len:
+            return name
+        if max_len <= 2:
+            return name[:max_len]
+        keep = max_len - 2
+        left = (keep + 1) // 2
+        right = keep - left
+        return f"{name[:left]}..{name[-right:]}" if right > 0 else f"{name[:keep]}.."
+
+    def extract_org_name_from_url(self, repo_url: str, include_owner: bool = True) -> str:
+        """
+        Extract the name of the repository from a given URL, with an option to include the
+        owner in the result.
+
+        This method processes a repository URL, removes the '.git' extension if present,
+        and extracts the repository name along with its owner if specified. Optionally,
+        it can truncate the repository name to ensure the final string fits within a
+        maximum length.
+
+        Arguments:
+            repo_url: str
+                The full URL of the repository.
+            include_owner: bool, optional
+                Flag to indicate whether to include the owner's name in the output.
+                Defaults to True.
+
+        Returns:
+            str
+                The processed repository name, which may include the owner depending
+                on the `include_owner` argument.
+        """
+
+        owner, repo = self.extract_owner_and_repo_name_from_url(repo_url)
+        if include_owner:
+            remaining = self.max_repo_name_length - len(owner) - 1
+            squeezed_repo = self._squeeze_middle(repo, remaining)
+            return f"{owner}/{squeezed_repo}"
+        else:
+            return self._squeeze_middle(repo, self.max_repo_name_length)
+
+    @staticmethod
+    def extract_owner_and_repo_name_from_url(repo_url) -> tuple[Any, Any]:
+        """
+        Extracts the repository owner and repository name from a given repository URL.
+
+        This function processes a repository URL, removes the `.git` suffix if
+        present, splits the URL by `/`, and retrieves the owner and repository
+        name based on the structure of the URL.
+
+        :param repo_url: The URL of the Git repository.
+        :return: A tuple containing the owner and repository name.
+        """
+        if repo_url.endswith(".git"):
+            repo_url = repo_url[:-4]
+        parts = repo_url.rstrip("/").split("/")
+        owner, repo = parts[-2], parts[-1]
+
+        return owner, repo
 
 
 class RateLimiter:
@@ -86,6 +171,7 @@ class SnykRepoImporter:
         self.base_url = self._get_base_url(region)
         self.snyk_rate_limiter = RateLimiter(rate_limit)  # Snyk API rate limiter (configurable)
         self.github_rate_limiter = RateLimiter(1.0)  # GitHub API rate limiter (1 call/sec for safety)
+        self.snyk_urls = SnykUrls(max_repo_name_length=60)  # Snyk organization name shortening
         self.rate_limit = rate_limit
         self.max_threads = max_threads
         self.session = requests.Session()
@@ -347,11 +433,13 @@ class SnykRepoImporter:
         return repos
 
     def get_organization_name(self, repo_info: RepoInfo) -> str:
-        """Generate organization name based on naming preference."""
+        """Generate organization name based on naming preference with Snyk 60-character limit."""
         if self.org_naming == "repo-only":
-            return repo_info.repo
+            # Use SnykUrls to shorten repo name to fit within 60 characters
+            return self.snyk_urls.extract_org_name_from_url(repo_info.url, include_owner=False)
         else:  # "owner-repo"
-            return f"{repo_info.owner}-{repo_info.repo}"
+            # Use SnykUrls to shorten the combined owner-repo name to fit within 60 characters
+            return self.snyk_urls.extract_org_name_from_url(repo_info.url, include_owner=True)
 
     def fetch_existing_organizations(self) -> None:
         """Fetch all existing organizations and cache them by name."""
@@ -773,7 +861,7 @@ Examples:
     parser.add_argument('--source-org-id', help='Source organization ID (can also use SNYK_SOURCE_ORG_ID env var)')
     parser.add_argument('--csv-file', required=True, help='CSV file containing GitHub repository URLs')
     parser.add_argument('--integration-type', default='github',
-                       choices=['github', 'github-enterprise', 'gitlab', 'bitbucket-cloud', 'bitbucket-server', 'azure-repos'],
+                       choices=['github', 'github-cloud-app', 'github-enterprise', 'gitlab', 'bitbucket-cloud', 'bitbucket-server', 'azure-repos'],
                        help='Integration type for repository import (default: github)')
     parser.add_argument('--github-base-url', default='https://github.com',
                        help='GitHub base URL for enterprise instances (default: https://github.com)')

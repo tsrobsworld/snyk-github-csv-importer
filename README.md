@@ -31,6 +31,9 @@ python3 snyk_repo_importer.py --snyk-token YOUR_TOKEN --group-id GROUP_ID --csv-
 # GitHub Enterprise with custom base URL
 python3 snyk_repo_importer.py --snyk-token YOUR_TOKEN --group-id GROUP_ID --csv-file repos.csv --integration-type github-enterprise --source-org-id SOURCE_ORG_ID --github-base-url https://github.company.com
 
+# GitHub Cloud App
+python3 snyk_repo_importer.py --snyk-token YOUR_TOKEN --group-id GROUP_ID --csv-file repos.csv --integration-type github-cloud-app
+
 # High performance
 python3 snyk_repo_importer.py --snyk-token YOUR_TOKEN --group-id GROUP_ID --csv-file repos.csv --threads 15 --rate-limit 20
 ```
